@@ -1,0 +1,143 @@
+
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scanner Barcode Gudang</title>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 600px;
+      margin: 25px auto;
+      padding: 16px;
+      text-align: center;
+      background: #f4f6f9;
+    }
+    .card {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 2px 10px #ddd;
+    }
+    button {
+      padding: 12px 18px;
+      margin: 8px;
+      border: 0;
+      border-radius: 6px;
+      color: white;
+      background: #0d6efd;
+      cursor: pointer;
+    }
+    #stop { background: #dc3545; }
+    #result {
+      padding: 12px;
+      margin-top: 15px;
+      overflow-wrap: anywhere;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Scanner Barcode Gudang</h2>
+    <p>Arahkan kamera ke barcode barang.</p>
+
+    <div id="reader"></div>
+
+    <button onclick="startScan()">Buka Kamera</button>
+    <button id="stop" onclick="stopScan()">Tutup Kamera</button>
+
+    <div id="result">Belum ada barcode yang terbaca.</div>
+    <button id="send" onclick="sendResult()" disabled>
+      Kirim ke Inventaris
+    </button>
+  </div>
+
+  <script>
+    let scanner = null;
+    let scannedCode = '';
+    let isScanning = false;
+
+    async function startScan() {
+      if (isScanning) return;
+
+      if (!navigator.mediaDevices ||
+          !navigator.mediaDevices.getUserMedia) {
+        alert('Browser tidak mendukung akses kamera.');
+        return;
+      }
+
+      try {
+        // Minta izin kamera secara langsung.
+        const stream =
+          await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'environment' }
+          });
+
+        stream.getTracks().forEach(track => track.stop());
+
+        if (!scanner) {
+          scanner = new Html5Qrcode('reader');
+        }
+
+        await scanner.start(
+          { facingMode: 'environment' },
+          {
+            fps: 10,
+            qrbox: { width: 250, height: 150 }
+          },
+          async function(decodedText) {
+            scannedCode = decodedText;
+            document.getElementById('result').textContent =
+              'Barcode: ' + scannedCode;
+            document.getElementById('send').disabled = false;
+            await stopScan();
+          },
+          function() {}
+        );
+
+        isScanning = true;
+      } catch (err) {
+        console.error(err);
+        alert(
+          'Kamera gagal dibuka: ' + err.name +
+          '\nPeriksa izin kamera browser dan pastikan halaman dibuka melalui HTTPS.'
+        );
+      }
+    }
+
+    async function stopScan() {
+      if (scanner && isScanning) {
+        try {
+          await scanner.stop();
+        } catch (e) {
+          console.error(e);
+        }
+      }
+      isScanning = false;
+    }
+
+    function sendResult() {
+      if (!scannedCode) return;
+
+      if (!window.opener || window.opener.closed) {
+        alert(
+          'Halaman inventaris tidak ditemukan. ' +
+          'Buka scanner melalui tombol dari aplikasi inventaris.'
+        );
+        return;
+      }
+
+      window.opener.postMessage({
+        type: 'BARCODE_SCANNED',
+        code: scannedCode
+      }, '*');
+
+      document.getElementById('result').textContent =
+        'Barcode dikirim: ' + scannedCode;
+    }
+  </script>
+</body>
+</html>
